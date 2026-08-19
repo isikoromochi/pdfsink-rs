@@ -41,8 +41,8 @@ pub enum Error {
     Message(String),
 }
 
-impl From<pdf_extract::OutputError> for Error {
-    fn from(value: pdf_extract::OutputError) -> Self {
+impl From<pdf_extract::PdfExtractError> for Error {
+    fn from(value: pdf_extract::PdfExtractError) -> Self {
         Self::PdfExtract(value.to_string())
     }
 }
