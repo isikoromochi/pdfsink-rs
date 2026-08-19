@@ -1,0 +1,8 @@
+# PDF fixtures are binary: their xref tables store absolute byte offsets, so any
+# line-ending conversion (core.autocrlf=true on Windows) corrupts them and makes
+# every test fail with InvalidTrailer. Git's own heuristic misclassifies them as
+# text because they contain no NUL bytes near the start.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
