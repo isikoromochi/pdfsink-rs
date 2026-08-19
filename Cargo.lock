@@ -673,7 +673,7 @@ dependencies = [
 [[package]]
 name = "pdf-extract"
 version = "0.12.0"
-source = "git+ssh://git@github.com/isikoromochi/pdf-extract.git#9bf82f44ef0ae7e8ed22f55408ea65a33bf366d5"
+source = "git+https://github.com/isikoromochi/pdf-extract.git?rev=9bf82f44ef0ae7e8ed22f55408ea65a33bf366d5#9bf82f44ef0ae7e8ed22f55408ea65a33bf366d5"
 dependencies = [
  "adobe-cmap-parser",
  "cff-parser",
