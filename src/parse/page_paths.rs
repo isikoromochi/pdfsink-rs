@@ -9,7 +9,7 @@ pub(super) fn collect(
     geom: PageGeometry,
     page_number: usize,
 ) -> Result<PagePaths> {
-    let content = doc.get_page_content(page_id)?;
+    let content = doc.get_page_content(page_id);
     let mut walker = PagePathWalker {
         doc,
         collector: CollectorOutput::new(geom, page_number),
@@ -145,9 +145,7 @@ impl PagePathWalker<'_> {
                     current_point = subpath_start;
                 }
                 "re" => {
-                    if let Some((x, y, width, height)) =
-                        rect_from_operands(&operation.operands)
-                    {
+                    if let Some((x, y, width, height)) = rect_from_operands(&operation.operands) {
                         path.ops.push(PathOp::Rect(x, y, width, height));
                         current_point = Some((x, y));
                         subpath_start = Some((x, y));
@@ -155,16 +153,12 @@ impl PagePathWalker<'_> {
                 }
                 "S" => self.paint(&ctm, &mut path, true, false, false),
                 "s" => self.paint(&ctm, &mut path, true, false, true),
-                "F" | "f" | "f*" => {
-                    self.paint(&ctm, &mut path, false, true, false)
-                }
+                "F" | "f" | "f*" => self.paint(&ctm, &mut path, false, true, false),
                 "B" | "B*" => self.paint(&ctm, &mut path, true, true, false),
                 "b" | "b*" => self.paint(&ctm, &mut path, true, true, true),
                 "n" => path.ops.clear(),
                 "Do" => {
-                    if let Some(name) =
-                        operation.operands.first().and_then(obj_to_name_string)
-                    {
+                    if let Some(name) = operation.operands.first().and_then(obj_to_name_string) {
                         self.walk_xobject(resources, &name, ctm, form_depth)?;
                     }
                 }
@@ -182,14 +176,7 @@ impl PagePathWalker<'_> {
         Ok(())
     }
 
-    fn paint(
-        &mut self,
-        ctm: &Transform,
-        path: &mut Path,
-        stroke: bool,
-        fill: bool,
-        close: bool,
-    ) {
+    fn paint(&mut self, ctm: &Transform, path: &mut Path, stroke: bool, fill: bool, close: bool) {
         if close {
             close_path(path);
         }
@@ -236,9 +223,7 @@ impl PagePathWalker<'_> {
         }
         if let Some(object_id) = object_id {
             if !self.active_forms.insert(object_id) {
-                return Err(Error::Message(
-                    "cyclic Form XObject reference".to_string(),
-                ));
+                return Err(Error::Message("cyclic Form XObject reference".to_string()));
             }
         }
 
@@ -254,8 +239,7 @@ impl PagePathWalker<'_> {
         let bytes = stream
             .decompressed_content()
             .unwrap_or_else(|_| stream.content.clone());
-        let result =
-            self.walk_stream(bytes, &form_resources, next_ctm, form_depth + 1);
+        let result = self.walk_stream(bytes, &form_resources, next_ctm, form_depth + 1);
 
         if let Some(object_id) = object_id {
             self.active_forms.remove(&object_id);
@@ -271,9 +255,7 @@ fn point_from_operands(operands: &[Object], offset: usize) -> Option<(f64, f64)>
     ))
 }
 
-fn curve_from_operands(
-    operands: &[Object],
-) -> Option<((f64, f64), (f64, f64), (f64, f64))> {
+fn curve_from_operands(operands: &[Object]) -> Option<((f64, f64), (f64, f64), (f64, f64))> {
     Some((
         point_from_operands(operands, 0)?,
         point_from_operands(operands, 2)?,
@@ -291,9 +273,7 @@ fn rect_from_operands(operands: &[Object]) -> Option<(f64, f64, f64, f64)> {
 }
 
 fn close_path(path: &mut Path) {
-    if !path.ops.is_empty()
-        && !matches!(path.ops.last(), Some(PathOp::Close | PathOp::Rect(..)))
-    {
+    if !path.ops.is_empty() && !matches!(path.ops.last(), Some(PathOp::Close | PathOp::Rect(..))) {
         path.ops.push(PathOp::Close);
     }
 }

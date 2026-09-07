@@ -84,7 +84,7 @@ pub(super) fn collect(
     geom: PageGeometry,
     page_number: usize,
 ) -> Result<Type3Content> {
-    let content = doc.get_page_content(page_id)?;
+    let content = doc.get_page_content(page_id);
     let mut walker = Type3Walker {
         doc,
         geom,
@@ -168,7 +168,8 @@ impl Type3Walker<'_> {
                 "\"" => {
                     if operation.operands.len() >= 3 {
                         state.text.word_spacing = obj_to_f64(&operation.operands[0]).unwrap_or(0.0);
-                        state.text.character_spacing = obj_to_f64(&operation.operands[1]).unwrap_or(0.0);
+                        state.text.character_spacing =
+                            obj_to_f64(&operation.operands[1]).unwrap_or(0.0);
                         next_text_line(&mut state.text);
                         if let Some(bytes) = string_bytes(&operation.operands[2]) {
                             self.show_text(&mut state, bytes)?;
@@ -227,9 +228,8 @@ impl Type3Walker<'_> {
             if let Some(bytes) = string_bytes(item) {
                 self.show_text(state, bytes)?;
             } else if let Some(adjustment) = obj_to_f64(item) {
-                let tx = -adjustment / 1000.0
-                    * state.text.font_size
-                    * state.text.horizontal_scaling;
+                let tx =
+                    -adjustment / 1000.0 * state.text.font_size * state.text.horizontal_scaling;
                 translate_text_matrix(&mut state.text, tx, 0.0);
             }
         }
@@ -316,9 +316,7 @@ impl Type3Walker<'_> {
         } else {
             0.0
         };
-        let tx = (advance * state.text.font_size
-            + state.text.character_spacing
-            + word_spacing)
+        let tx = (advance * state.text.font_size + state.text.character_spacing + word_spacing)
             * state.text.horizontal_scaling;
         translate_text_matrix(&mut state.text, tx, 0.0);
         Ok(())

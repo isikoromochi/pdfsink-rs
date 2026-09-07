@@ -1,24 +1,17 @@
 use crate::clustering::cluster_items;
 use crate::geometry::{objects_to_bbox, rect_to_edges, snap_edges};
 use crate::text::{extract_text, extract_words, TextOptions};
-use crate::types::{
-    BBox, Char, Edge, Line, Orientation, Page, Word,
-};
+use crate::types::{BBox, Char, Edge, Line, Orientation, Page, Word};
 use ordered_float::OrderedFloat;
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TableStrategy {
+    #[default]
     Lines,
     LinesStrict,
     Text,
     Explicit,
-}
-
-impl Default for TableStrategy {
-    fn default() -> Self {
-        Self::Lines
-    }
 }
 
 impl std::str::FromStr for TableStrategy {
@@ -30,7 +23,9 @@ impl std::str::FromStr for TableStrategy {
             "lines_strict" => Ok(Self::LinesStrict),
             "text" => Ok(Self::Text),
             "explicit" => Ok(Self::Explicit),
-            other => Err(crate::Error::Message(format!("unknown table strategy: {other}"))),
+            other => Err(crate::Error::Message(format!(
+                "unknown table strategy: {other}"
+            ))),
         }
     }
 }
@@ -106,11 +101,13 @@ impl TableSettings {
     }
 
     pub fn intersection_x_tolerance(&self) -> f64 {
-        self.intersection_x_tolerance.unwrap_or(self.intersection_tolerance)
+        self.intersection_x_tolerance
+            .unwrap_or(self.intersection_tolerance)
     }
 
     pub fn intersection_y_tolerance(&self) -> f64 {
-        self.intersection_y_tolerance.unwrap_or(self.intersection_tolerance)
+        self.intersection_y_tolerance
+            .unwrap_or(self.intersection_tolerance)
     }
 }
 
@@ -206,7 +203,11 @@ impl Table {
     }
 
     fn get_rows_or_cols(&self, rows: bool) -> Vec<CellGroup> {
-        let (axis, antiaxis) = if rows { (0usize, 1usize) } else { (1usize, 0usize) };
+        let (axis, antiaxis) = if rows {
+            (0usize, 1usize)
+        } else {
+            (1usize, 0usize)
+        };
 
         let mut cells = self.cells.clone();
         cells.sort_by(|a, b| {
@@ -233,7 +234,10 @@ impl Table {
             }
 
             let bbox = merged_optional_bbox(&row_cells);
-            out.push(CellGroup { cells: row_cells, bbox });
+            out.push(CellGroup {
+                cells: row_cells,
+                bbox,
+            });
         }
         out
     }
@@ -290,14 +294,19 @@ pub struct Intersection {
 }
 
 fn get_edges(page: &Page, settings: &TableSettings) -> crate::Result<Vec<Edge>> {
-    if matches!(settings.vertical_strategy, TableStrategy::Explicit) && settings.explicit_vertical_lines.len() < 2 {
+    if matches!(settings.vertical_strategy, TableStrategy::Explicit)
+        && settings.explicit_vertical_lines.len() < 2
+    {
         return Err(crate::Error::Message(
             "explicit vertical strategy requires at least two explicit vertical lines".to_string(),
         ));
     }
-    if matches!(settings.horizontal_strategy, TableStrategy::Explicit) && settings.explicit_horizontal_lines.len() < 2 {
+    if matches!(settings.horizontal_strategy, TableStrategy::Explicit)
+        && settings.explicit_horizontal_lines.len() < 2
+    {
         return Err(crate::Error::Message(
-            "explicit horizontal strategy requires at least two explicit horizontal lines".to_string(),
+            "explicit horizontal strategy requires at least two explicit horizontal lines"
+                .to_string(),
         ));
     }
 
@@ -352,7 +361,12 @@ fn get_edges(page: &Page, settings: &TableSettings) -> crate::Result<Vec<Edge>> 
     }
 
     let mut vertical = match settings.vertical_strategy {
-        TableStrategy::Lines => filter_edges(&page.edges(), Some(Orientation::Vertical), None, settings.edge_min_length_prefilter),
+        TableStrategy::Lines => filter_edges(
+            &page.edges(),
+            Some(Orientation::Vertical),
+            None,
+            settings.edge_min_length_prefilter,
+        ),
         TableStrategy::LinesStrict => filter_edges(
             &page.edges(),
             Some(Orientation::Vertical),
@@ -365,7 +379,12 @@ fn get_edges(page: &Page, settings: &TableSettings) -> crate::Result<Vec<Edge>> 
     vertical.extend(v_explicit);
 
     let mut horizontal = match settings.horizontal_strategy {
-        TableStrategy::Lines => filter_edges(&page.edges(), Some(Orientation::Horizontal), None, settings.edge_min_length_prefilter),
+        TableStrategy::Lines => filter_edges(
+            &page.edges(),
+            Some(Orientation::Horizontal),
+            None,
+            settings.edge_min_length_prefilter,
+        ),
         TableStrategy::LinesStrict => filter_edges(
             &page.edges(),
             Some(Orientation::Horizontal),
@@ -401,8 +420,12 @@ fn filter_edges(
     edges
         .iter()
         .filter(|edge| {
-            let orientation_ok = orientation.map(|value| value == edge.orientation).unwrap_or(true);
-            let edge_type_ok = edge_type.map(|value| value == edge.object_type).unwrap_or(true);
+            let orientation_ok = orientation
+                .map(|value| value == edge.orientation)
+                .unwrap_or(true);
+            let edge_type_ok = edge_type
+                .map(|value| value == edge.object_type)
+                .unwrap_or(true);
             let dim = if edge.orientation == Orientation::Vertical {
                 edge.height
             } else {
@@ -496,7 +519,10 @@ fn join_edge_group(edges: &[Edge], orientation: char, tolerance: f64) -> Vec<Edg
 
 fn words_to_edges_h(words: &[Word], threshold: usize) -> Vec<Edge> {
     let clusters = cluster_items(words, |word| word.top, 1.0);
-    let large: Vec<Vec<Word>> = clusters.into_iter().filter(|cluster| cluster.len() >= threshold).collect();
+    let large: Vec<Vec<Word>> = clusters
+        .into_iter()
+        .filter(|cluster| cluster.len() >= threshold)
+        .collect();
     if large.is_empty() {
         return Vec::new();
     }
@@ -510,8 +536,14 @@ fn words_to_edges_h(words: &[Word], threshold: usize) -> Vec<Edge> {
         return Vec::new();
     }
 
-    let min_x0 = rects.iter().map(|bbox| bbox.x0).fold(f64::INFINITY, f64::min);
-    let max_x1 = rects.iter().map(|bbox| bbox.x1).fold(f64::NEG_INFINITY, f64::max);
+    let min_x0 = rects
+        .iter()
+        .map(|bbox| bbox.x0)
+        .fold(f64::INFINITY, f64::min);
+    let max_x1 = rects
+        .iter()
+        .map(|bbox| bbox.x1)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let mut edges = Vec::new();
     for rect in rects {
@@ -550,12 +582,21 @@ fn words_to_edges_v(words: &[Word], threshold: usize) -> Vec<Edge> {
     clusters.extend(by_center);
     clusters.sort_by(|a, b| b.len().cmp(&a.len()));
 
-    let large: Vec<Vec<Word>> = clusters.into_iter().filter(|cluster| cluster.len() >= threshold).collect();
-    let mut boxes: Vec<BBox> = large.iter().filter_map(|cluster| objects_to_bbox(cluster)).collect();
+    let large: Vec<Vec<Word>> = clusters
+        .into_iter()
+        .filter(|cluster| cluster.len() >= threshold)
+        .collect();
+    let mut boxes: Vec<BBox> = large
+        .iter()
+        .filter_map(|cluster| objects_to_bbox(cluster))
+        .collect();
 
     let mut condensed = Vec::new();
     for bbox in boxes.drain(..) {
-        if !condensed.iter().any(|existing: &BBox| existing.overlap(bbox).is_some()) {
+        if !condensed
+            .iter()
+            .any(|existing: &BBox| existing.overlap(bbox).is_some())
+        {
             condensed.push(bbox);
         }
     }
@@ -565,9 +606,18 @@ fn words_to_edges_v(words: &[Word], threshold: usize) -> Vec<Edge> {
     }
 
     condensed.sort_by(|a, b| a.x0.total_cmp(&b.x0));
-    let max_x1 = condensed.iter().map(|bbox| bbox.x1).fold(f64::NEG_INFINITY, f64::max);
-    let min_top = condensed.iter().map(|bbox| bbox.top).fold(f64::INFINITY, f64::min);
-    let max_bottom = condensed.iter().map(|bbox| bbox.bottom).fold(f64::NEG_INFINITY, f64::max);
+    let max_x1 = condensed
+        .iter()
+        .map(|bbox| bbox.x1)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_top = condensed
+        .iter()
+        .map(|bbox| bbox.top)
+        .fold(f64::INFINITY, f64::min);
+    let max_bottom = condensed
+        .iter()
+        .map(|bbox| bbox.bottom)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let mut out = Vec::new();
     for bbox in &condensed {
@@ -597,7 +647,11 @@ fn words_to_edges_v(words: &[Word], threshold: usize) -> Vec<Edge> {
     out
 }
 
-fn edges_to_intersections(edges: &[Edge], x_tolerance: f64, y_tolerance: f64) -> BTreeMap<PointKey, Intersection> {
+fn edges_to_intersections(
+    edges: &[Edge],
+    x_tolerance: f64,
+    y_tolerance: f64,
+) -> BTreeMap<PointKey, Intersection> {
     let vertical: Vec<Edge> = edges
         .iter()
         .filter(|edge| edge.orientation == Orientation::Vertical)
@@ -632,8 +686,18 @@ fn intersections_to_cells(intersections: &BTreeMap<PointKey, Intersection>) -> V
     let mut out = Vec::new();
 
     for (idx, point) in points.iter().enumerate() {
-        let below: Vec<PointKey> = points.iter().copied().skip(idx + 1).filter(|other| other.0 == point.0).collect();
-        let right: Vec<PointKey> = points.iter().copied().skip(idx + 1).filter(|other| other.1 == point.1).collect();
+        let below: Vec<PointKey> = points
+            .iter()
+            .copied()
+            .skip(idx + 1)
+            .filter(|other| other.0 == point.0)
+            .collect();
+        let right: Vec<PointKey> = points
+            .iter()
+            .copied()
+            .skip(idx + 1)
+            .filter(|other| other.1 == point.1)
+            .collect();
 
         for below_pt in &below {
             if !edge_connects(*point, *below_pt, intersections) {
@@ -649,7 +713,12 @@ fn intersections_to_cells(intersections: &BTreeMap<PointKey, Intersection>) -> V
                     && edge_connects(bottom_right, *right_pt, intersections)
                     && edge_connects(bottom_right, *below_pt, intersections)
                 {
-                    out.push(BBox::new(point.0.into_inner(), point.1.into_inner(), right_pt.0.into_inner(), below_pt.1.into_inner()));
+                    out.push(BBox::new(
+                        point.0.into_inner(),
+                        point.1.into_inner(),
+                        right_pt.0.into_inner(),
+                        below_pt.1.into_inner(),
+                    ));
                     break;
                 }
             }
@@ -659,7 +728,11 @@ fn intersections_to_cells(intersections: &BTreeMap<PointKey, Intersection>) -> V
     out
 }
 
-fn edge_connects(p1: PointKey, p2: PointKey, intersections: &BTreeMap<PointKey, Intersection>) -> bool {
+fn edge_connects(
+    p1: PointKey,
+    p2: PointKey,
+    intersections: &BTreeMap<PointKey, Intersection>,
+) -> bool {
     if p1.0 == p2.0 {
         let a: BTreeSet<BBoxKey> = intersections[&p1]
             .vertical
@@ -708,7 +781,10 @@ fn cells_to_tables(cells: &[BBox]) -> Vec<Vec<BBox>> {
                 current_cells.push(cell);
                 remove_bbox(&mut remaining, cell);
             } else {
-                let corner_count = corners.iter().filter(|corner| current_corners.contains(corner)).count();
+                let corner_count = corners
+                    .iter()
+                    .filter(|corner| current_corners.contains(corner))
+                    .count();
                 if corner_count > 0 {
                     current_corners.extend(corners);
                     current_cells.push(cell);

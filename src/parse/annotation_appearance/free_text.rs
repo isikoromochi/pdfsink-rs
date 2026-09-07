@@ -1,6 +1,6 @@
 use super::*;
-use lopdf::content::Operation;
-use lopdf::Encoding;
+use pdf_extract::lopdf::content::Operation;
+use pdf_extract::lopdf::Encoding;
 
 const MAX_CONTENT_BYTES: usize = 16 * 1024;
 const MAX_DEFAULT_APPEARANCE_BYTES: usize = 4 * 1024;
@@ -67,10 +67,7 @@ pub(super) fn synthesize(
                 vec![Object::Integer(0), Object::Real(-(leading as f32))],
             ));
         }
-        operations.push(Operation::new(
-            "Tj",
-            vec![Object::string_literal(encoded)],
-        ));
+        operations.push(Operation::new("Tj", vec![Object::string_literal(encoded)]));
         line_count += 1;
     }
     if line_count == 0 {
