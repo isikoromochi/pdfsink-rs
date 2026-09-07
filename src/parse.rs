@@ -2,12 +2,14 @@ use crate::error::{Error, Result};
 use crate::geometry::bbox_from_points;
 use crate::path_geometry::cubic_extrema_points;
 use crate::types::{
-    Annotation, BBox, Char, Curve, Hyperlink, ImageObject, JsonMap, Line, Page, PathCommand, Point, RectObject,
+    Annotation, BBox, Char, Curve, Hyperlink, ImageObject, JsonMap, Line, Page, PathCommand, Point,
+    RectObject,
 };
 use euclid::{Point2D, Transform2D};
-use lopdf::content::Content;
-use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
-use pdf_extract::{MediaBox, OutputDev, Path, PathOp, Space, Transform};
+use pdf_extract::{
+    lopdf::{content::Content, Dictionary, Document, Object, ObjectId, Stream},
+    MediaBox, OutputDev, Path, PathOp, PdfExtractError, Space, Transform,
+};
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -61,7 +63,11 @@ impl PageGeometry {
         let turns = ((self.rotation % 360) + 360) % 360 / 90;
         for i in 0..turns {
             let (px, py) = pt;
-            let comp = if i == turns % 2 { self.width } else { self.height };
+            let comp = if i == turns % 2 {
+                self.width
+            } else {
+                self.height
+            };
             pt = (py, comp - px);
         }
         Point::new(pt.0, self.height - pt.1)
@@ -313,11 +319,16 @@ impl CollectorOutput {
 }
 
 impl OutputDev for CollectorOutput {
-    fn begin_page(&mut self, _page_num: u32, _media_box: &MediaBox, _art_box: Option<(f64, f64, f64, f64)>) -> std::result::Result<(), pdf_extract::OutputError> {
+    fn begin_page(
+        &mut self,
+        _page_num: u32,
+        _media_box: &MediaBox,
+        _art_box: Option<(f64, f64, f64, f64)>,
+    ) -> std::result::Result<(), PdfExtractError> {
         Ok(())
     }
 
-    fn end_page(&mut self) -> std::result::Result<(), pdf_extract::OutputError> {
+    fn end_page(&mut self) -> std::result::Result<(), PdfExtractError> {
         Ok(())
     }
 
@@ -328,20 +339,20 @@ impl OutputDev for CollectorOutput {
         _spacing: f64,
         font_size: f64,
         text: &str,
-    ) -> std::result::Result<(), pdf_extract::OutputError> {
+    ) -> std::result::Result<(), PdfExtractError> {
         self.push_char(trm, width, font_size, text);
         Ok(())
     }
 
-    fn begin_word(&mut self) -> std::result::Result<(), pdf_extract::OutputError> {
+    fn begin_word(&mut self) -> std::result::Result<(), PdfExtractError> {
         Ok(())
     }
 
-    fn end_word(&mut self) -> std::result::Result<(), pdf_extract::OutputError> {
+    fn end_word(&mut self) -> std::result::Result<(), PdfExtractError> {
         Ok(())
     }
 
-    fn end_line(&mut self) -> std::result::Result<(), pdf_extract::OutputError> {
+    fn end_line(&mut self) -> std::result::Result<(), PdfExtractError> {
         Ok(())
     }
 
@@ -351,7 +362,7 @@ impl OutputDev for CollectorOutput {
         _colorspace: &pdf_extract::ColorSpace,
         _color: &[f64],
         path: &Path,
-    ) -> std::result::Result<(), pdf_extract::OutputError> {
+    ) -> std::result::Result<(), PdfExtractError> {
         self.push_path(ctm, path, true, false);
         Ok(())
     }
@@ -362,7 +373,7 @@ impl OutputDev for CollectorOutput {
         _colorspace: &pdf_extract::ColorSpace,
         _color: &[f64],
         path: &Path,
-    ) -> std::result::Result<(), pdf_extract::OutputError> {
+    ) -> std::result::Result<(), PdfExtractError> {
         self.push_path(ctm, path, false, true);
         Ok(())
     }
@@ -425,8 +436,8 @@ fn open_pdf_document(
     selected_page_numbers: Option<&[usize]>,
 ) -> Result<crate::types::PdfDocument> {
     let pages = doc.get_pages();
-    let selected = selected_page_numbers
-        .map(|numbers| numbers.iter().copied().collect::<HashSet<_>>());
+    let selected =
+        selected_page_numbers.map(|numbers| numbers.iter().copied().collect::<HashSet<_>>());
 
     if let Some(selected) = &selected {
         if selected.contains(&0) {
@@ -467,7 +478,12 @@ fn open_pdf_document(
     })
 }
 
-fn parse_page(doc: &Document, page_number: usize, page_id: ObjectId, doctop_offset: f64) -> Result<Page> {
+fn parse_page(
+    doc: &Document,
+    page_number: usize,
+    page_id: ObjectId,
+    doctop_offset: f64,
+) -> Result<Page> {
     let rotation = get_inherited_object(doc, page_id, b"Rotate")?
         .and_then(|obj| obj_to_i64(&obj))
         .unwrap_or(0)
@@ -479,17 +495,37 @@ fn parse_page(doc: &Document, page_number: usize, page_id: ObjectId, doctop_offs
     let geom = PageGeometry::from_media_box(media_box, rotation, doctop_offset);
     let mediabox = raw_box_to_bbox(media_box, geom).unwrap_or_else(|| geom.page_bbox());
     let cropbox = get_inherited_object(doc, page_id, b"CropBox")?
-        .map(|obj| obj_to_box(&obj).and_then(|raw| raw_box_to_bbox(raw, geom).ok_or_else(|| Error::Message("invalid CropBox".to_string()))))
+        .map(|obj| {
+            obj_to_box(&obj).and_then(|raw| {
+                raw_box_to_bbox(raw, geom)
+                    .ok_or_else(|| Error::Message("invalid CropBox".to_string()))
+            })
+        })
         .transpose()?
         .unwrap_or(mediabox);
     let trimbox = get_inherited_object(doc, page_id, b"TrimBox")?
-        .map(|obj| obj_to_box(&obj).and_then(|raw| raw_box_to_bbox(raw, geom).ok_or_else(|| Error::Message("invalid TrimBox".to_string()))))
+        .map(|obj| {
+            obj_to_box(&obj).and_then(|raw| {
+                raw_box_to_bbox(raw, geom)
+                    .ok_or_else(|| Error::Message("invalid TrimBox".to_string()))
+            })
+        })
         .transpose()?;
     let bleedbox = get_inherited_object(doc, page_id, b"BleedBox")?
-        .map(|obj| obj_to_box(&obj).and_then(|raw| raw_box_to_bbox(raw, geom).ok_or_else(|| Error::Message("invalid BleedBox".to_string()))))
+        .map(|obj| {
+            obj_to_box(&obj).and_then(|raw| {
+                raw_box_to_bbox(raw, geom)
+                    .ok_or_else(|| Error::Message("invalid BleedBox".to_string()))
+            })
+        })
         .transpose()?;
     let artbox = get_inherited_object(doc, page_id, b"ArtBox")?
-        .map(|obj| obj_to_box(&obj).and_then(|raw| raw_box_to_bbox(raw, geom).ok_or_else(|| Error::Message("invalid ArtBox".to_string()))))
+        .map(|obj| {
+            obj_to_box(&obj).and_then(|raw| {
+                raw_box_to_bbox(raw, geom)
+                    .ok_or_else(|| Error::Message("invalid ArtBox".to_string()))
+            })
+        })
         .transpose()?;
 
     let page_dict = page_dict(doc, page_id)?;
@@ -522,8 +558,7 @@ fn parse_page(doc: &Document, page_number: usize, page_id: ObjectId, doctop_offs
         Vec::new()
     };
     let (mut lines, mut rects, mut curves) = if images_result.is_ok() {
-        page_paths::collect(doc, page_id, &resources, geom, page_number)
-            .unwrap_or_default()
+        page_paths::collect(doc, page_id, &resources, geom, page_number).unwrap_or_default()
     } else {
         (Vec::new(), Vec::new(), Vec::new())
     };
@@ -549,8 +584,8 @@ fn parse_page(doc: &Document, page_number: usize, page_id: ObjectId, doctop_offs
     curves.extend(appearance_curves);
 
     let images = images_result.unwrap_or_default();
-    let (annots, hyperlinks) = collect_annotations(doc, &page_dict, geom, page_number)
-        .unwrap_or_default();
+    let (annots, hyperlinks) =
+        collect_annotations(doc, &page_dict, geom, page_number).unwrap_or_default();
 
     Ok(Page {
         page_number,
@@ -583,7 +618,7 @@ fn collect_images(
     geom: PageGeometry,
     page_number: usize,
 ) -> Result<Vec<ImageObject>> {
-    let content = doc.get_page_content(page_id)?;
+    let content = doc.get_page_content(page_id);
     let mut walker = ImageWalker {
         doc,
         geom,
@@ -628,7 +663,9 @@ impl<'a> ImageWalker<'a> {
             match op.operator.as_str() {
                 "q" => stack.push(ctm),
                 "Q" => {
-                    ctm = stack.pop().unwrap_or_else(Transform2D::<f64, Space, Space>::identity);
+                    ctm = stack
+                        .pop()
+                        .unwrap_or_else(Transform2D::<f64, Space, Space>::identity);
                 }
                 "cm" => {
                     if op.operands.len() == 6 {
@@ -775,7 +812,12 @@ impl<'a> ImageWalker<'a> {
     }
 }
 
-fn collect_annotations(doc: &Document, page_dict: &Dictionary, geom: PageGeometry, page_number: usize) -> Result<(Vec<Annotation>, Vec<Hyperlink>)> {
+fn collect_annotations(
+    doc: &Document,
+    page_dict: &Dictionary,
+    geom: PageGeometry,
+    page_number: usize,
+) -> Result<(Vec<Annotation>, Vec<Hyperlink>)> {
     let mut annots = Vec::new();
     let mut hyperlinks = Vec::new();
 
@@ -864,11 +906,18 @@ fn page_dict(doc: &Document, page_id: ObjectId) -> Result<Dictionary> {
     match doc.get_object(page_id)? {
         Object::Dictionary(dict) => Ok(dict.clone()),
         Object::Stream(stream) => Ok(stream.dict.clone()),
-        other => Err(Error::Type(format!("page object is not a dictionary: {:?}", other))),
+        other => Err(Error::Type(format!(
+            "page object is not a dictionary: {:?}",
+            other
+        ))),
     }
 }
 
-fn get_inherited_object(doc: &Document, mut current_id: ObjectId, key: &[u8]) -> Result<Option<Object>> {
+fn get_inherited_object(
+    doc: &Document,
+    mut current_id: ObjectId,
+    key: &[u8],
+) -> Result<Option<Object>> {
     let mut visited = HashSet::new();
     for _ in 0..MAX_PAGE_PARENT_DEPTH {
         if !visited.insert(current_id) {
@@ -907,7 +956,10 @@ fn transform_from_operands(operands: &[Object]) -> Result<Transform> {
 fn transform_from_obj(obj: &Object) -> Result<Transform> {
     match obj {
         Object::Array(items) => transform_from_operands(items),
-        other => Err(Error::Type(format!("expected transform array, got {:?}", other))),
+        other => Err(Error::Type(format!(
+            "expected transform array, got {:?}",
+            other
+        ))),
     }
 }
 
@@ -940,7 +992,9 @@ fn extract_metadata(doc: &Document) -> JsonMap {
     for (key, value) in info_dict.iter() {
         let key = String::from_utf8_lossy(key).into_owned();
         let value = match value {
-            Object::String(bytes, _) => decode_bytes(bytes).map(Value::String).unwrap_or(Value::Null),
+            Object::String(bytes, _) => decode_bytes(bytes)
+                .map(Value::String)
+                .unwrap_or(Value::Null),
             Object::Name(bytes) => Value::String(String::from_utf8_lossy(bytes).into_owned()),
             Object::Integer(v) => Value::from(*v),
             Object::Real(v) => Value::from(*v as f64),

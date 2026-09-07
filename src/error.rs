@@ -8,7 +8,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("PDF parse error: {0}")]
-    Lopdf(#[from] lopdf::Error),
+    Lopdf(#[from] pdf_extract::lopdf::Error),
 
     #[error("pdf-extract error: {0}")]
     PdfExtract(String),
@@ -41,8 +41,8 @@ pub enum Error {
     Message(String),
 }
 
-impl From<pdf_extract::OutputError> for Error {
-    fn from(value: pdf_extract::OutputError) -> Self {
+impl From<pdf_extract::PdfExtractError> for Error {
+    fn from(value: pdf_extract::PdfExtractError) -> Self {
         Self::PdfExtract(value.to_string())
     }
 }
